@@ -3,83 +3,76 @@ import pandas as pd
 import yfinance as yf
 import matplotlib.pyplot as plt
 import seaborn as sns
-#apple = yf.download("AAPL", start = "2010-01-01",end="2021-01-01")
-#
-#ticker = ["SPY","AAPL","KO"]
-#
-#stocks = yf.download(ticker,start= "2010-01-01",end = "2021-01-01")
-#stocks.to_csv("stocks_data.csv")
+import math
+import xlsxwriter
 
 
-stocks = pd.read_csv("stocks_data.csv",header=[0,1],index_col=[0],parse_dates=[0])
-#stocks.columns=stocks.columns.to_flat_index()
-#stocks.columns=pd.MultiIndex.from_tuples(stocks.columns)
+#apple = yf.Ticker("AAPL")
 
-close = stocks.loc[:,"Close"].copy()
-plt.style.use("seaborn-v0_8")
-#close.plot(figsize=(15,8),fontsize=12)
-#plt.show()
+stocks = pd.read_csv("sp_500_stocks.csv")
+# Get the latest stock price using the history method
 
-#print(close.iloc[0])
-norm_close = close.div(close.iloc[0]).mul(100)
-#norm_close.plot(figsize=(15,8),fontsize=12)
-#plt.show()
+#latest_data = apple.history(period="1d")
+#latest_price = latest_data['Close'].iloc[0]
+
+#market_cap = apple.info['marketCap']
 
 
-apple = close.AAPL.copy().to_frame()
-#apple["lag1"] =apple.shift()
-#apple["diff"] = apple.AAPL.sub(apple.lag1)
-#apple["percentage_chagnge"] = apple.AAPL.div(apple.lag1)
-#apple["diff2"] = apple.AAPL.diff(periods=1)
-#apple["% change"] = apple.AAPL.pct_change(periods=1).mul(100)
-#del apple["diff"]
-#apple.rename(columns={"% change":"Change"}, inplace = True)
-#apple.AAPL.resample("M").last()
-#print(apple.AAPL.resample("BM").last().pct_change(periods=1).mul(100))
+my_columns=["Ticker","Stock Price","Market Capitalisation","Number of Shares to Buy"]
+#final_dataframe = final_dataframe.append(pd.Series(["AAPL",latest_price,market_cap,"N/A"],index=my_columns),ignore_index=True)
 
-#ret = apple.pct_change().dropna()
-#ret.plot(kind="hist",figsize = (12,8),bins=100)
-#plt.show()
-#ret_mean = ret.mean()
-#ret_var = ret.mean()
-#std_ret = ret.std()
+def iterate_sp500():
+    final_dataframe = pd.DataFrame(columns=my_columns)
+    for ticker in stocks["Ticker"]:
+        print(ticker)
+        company = yf.Ticker(ticker.strip())  # Create a Ticker object for each company
+        latest_data = company.history(period="1d")  # Get the latest stock price using the history method
+        if not latest_data.empty:  # Check if data is available
+            latest_price = latest_data['Close'].iloc[-1]  # Get the latest closing price
+            market_cap = company.info.get("marketCap", np.nan)  # Get the market cap, default to NaN if not available
+            # Create a new DataFrame for the current row
+            new_row = pd.DataFrame([[ticker, latest_price, market_cap, "N/A"]], columns=my_columns)
+            # Concatenate the new row to the final DataFrame
+            final_dataframe = pd.concat([final_dataframe, new_row], ignore_index=True)
 
-#annual_mean_ret=ret_mean * 252
-#annual_var_ret = ret_var *252
-#annual_std_ret = std_ret *252
-#
+final_dataframe = pd.read_csv("sp500_dataframe.csv")
 
 
-ticker = ["SPY","AAPL","KO","IBM","DIS","MSFT"]
-stocks = yf.download(ticker,start= "2010-01-01",end = "2021-01-01")
-stocks.to_csv("stocks_data.csv")
 
+portfolio_size=int(input("Enter the value of your portfolio: "))
 
-stocks = pd.read_csv("stocks_data.csv",header=[0,1],index_col=[0],parse_dates=[0])
+position_size = portfolio_size/len(final_dataframe.index)
+for i in range(0,len(final_dataframe.index)):
+    price = final_dataframe["Stock Price"].iloc[i]
+    print(price)
+    number_to_buy= math.floor(position_size/price)
+    final_dataframe["Number of Shares to Buy"].iloc[i] = number_to_buy
 
-close = stocks.loc[:,"Close"].copy()
-norm_close = close.div(close.iloc[0]).mul(100)
-#norm_close.plot(figsize=(15,8),fontsize=12)
-plt.style.use("seaborn-v0_8")
-#plt.show()
-ret = close.pct_change().dropna()
-#ret = ret.describe().T.loc[:,["mean","std"]]
-#ret["mean"] *= 252
-#ret["std"] *= np.sqrt(252)
-##ret.plot.scatter(x="std",y="mean",figsize=(12,8),s=50,fontsize =15,)
-#
-#
-#
-#
-#
-#
-#
+print(final_dataframe)
 
-# covariance
-#print(ret.cov())
-#correlation
-#print(ret.corr())
+writer = pd.ExcelWriter("recommended trades.xlsx", engine ="xlsxwriter")
+final_dataframe.to_excel(writer,"Recommended Trades", index = False)
 
-sns.set(font_scale=1.4)
-sns.heatmap(ret.cov(),cmap="Reds",annot=True,annot_kws={"size":15},vmax=0.001)
-plt.show()
+background_colour = "#0a0a23"
+font_colour = "ffffff"
+
+string_format = writer.book.add_format({"font_color": font_colour,"bg_color": background_colour,"border":1})
+dollar_format = writer.book.add_format({"num_format":"$0.00","font_color": font_colour,"bg_color": background_colour,"border":1})
+interger_format = writer.book.add_format({"num_format":"0","font_color": font_colour,"bg_color": background_colour,"border":1})
+
+writer.sheets["Recommended Trades"].write("A1","Ticker",string_format)
+writer.sheets["Recommended Trades"].write("B1","Stock Price",string_format)
+writer.sheets["Recommended Trades"].write("C1","Market capitalisation",string_format)
+writer.sheets["Recommended Trades"].write("D1","Number of Shates to Buy",string_format)
+
+column_formats = {
+    "A": ["Ticker",string_format],
+    "B": ["Stock Price",dollar_format],
+    "C": ["Market Capitalisation",dollar_format],
+    "D": ["Number of Shates to Buy",interger_format]
+}
+
+for i in column_formats.keys():
+    writer.sheets["Recommended Trades"].set_column(f"{i}:{i}",18,column_formats[i][1])
+
+writer.save()
